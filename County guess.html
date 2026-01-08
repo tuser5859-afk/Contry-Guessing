@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kids Guess the Country</title>
+
+<style>
+body {
+    font-family: 'Comic Sans MS', Arial, sans-serif;
+    background: linear-gradient(135deg, #ffecd2, #fcb69f);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.card {
+    background: #fff;
+    padding: 22px;
+    border-radius: 18px;
+    width: 390px;
+    text-align: center;
+    box-shadow: 0 12px 25px rgba(0,0,0,0.25);
+    transition: all 0.4s ease;
+}
+
+.card.correct {
+    box-shadow: 0 0 25px #4caf50;
+    border: 3px solid #4caf50;
+}
+
+.card.wrong {
+    box-shadow: 0 0 25px #f44336;
+    border: 3px solid #f44336;
+}
+
+h2 { color: #ff5722; }
+
+.scoreboard {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.score {
+    width: 48%;
+    padding: 10px;
+    border-radius: 12px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.correctBox { background: #e8f5e9; color: #2e7d32; }
+.wrongBox { background: #ffebee; color: #c62828; }
+
+img {
+    width: 220px;
+    height: 140px;
+    border-radius: 12px;
+    border: 2px solid #ddd;
+    margin: 10px 0;
+}
+
+#timer {
+    font-size: 20px;
+    font-weight: bold;
+    color: #e53935;
+}
+
+button {
+    padding: 12px 22px;
+    border: none;
+    border-radius: 12px;
+    background: #4caf50;
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+#spoken {
+    margin-top: 10px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+#answer {
+    margin-top: 8px;
+    font-size: 22px;
+    font-weight: bold;
+}
+
+.infoBox {
+    background: #e3f2fd;
+    border-radius: 12px;
+    padding: 10px;
+    margin-top: 10px;
+    font-size: 16px;
+    display: none;
+}
+</style>
+</head>
+
+<body>
+
+<div class="card" id="card">
+    <h2>Guess the Country</h2>
+
+    <div class="scoreboard">
+        <div class="score correctBox">✅ Right<br><span id="correct">0</span></div>
+        <div class="score wrongBox">❌ Wrong<br><span id="wrong">0</span></div>
+    </div>
+
+    <img id="flag" src="">
+    <div id="timer">Time: 00:20</div>
+
+    <button id="startBtn">▶️ Start Game</button>
+
+    <div id="spoken"></div>
+    <div id="answer"></div>
+    <div class="infoBox" id="infoBox"></div>
+</div>
+
+<script>
+const countries = [
+ {name:"India", flag:"https://flagcdn.com/w320/in.png", capital:"New Delhi", continent:"Asia"},
+ {name:"France", flag:"https://flagcdn.com/w320/fr.png", capital:"Paris", continent:"Europe"},
+ {name:"Japan", flag:"https://flagcdn.com/w320/jp.png", capital:"Tokyo", continent:"Asia"},
+ {name:"Brazil", flag:"https://flagcdn.com/w320/br.png", capital:"Brasília", continent:"South America"},
+ {name:"Canada", flag:"https://flagcdn.com/w320/ca.png", capital:"Ottawa", continent:"North America"}
+];
+
+let currentCountry, timer, timeLeft = 20;
+let correct = 0, wrong = 0;
+let listening = false;
+let micGranted = false;
+let paused = false;
+
+const flag = document.getElementById("flag");
+const spoken = document.getElementById("spoken");
+const answer = document.getElementById("answer");
+const infoBox = document.getElementById("infoBox");
+const timerEl = document.getElementById("timer");
+const startBtn = document.getElementById("startBtn");
+const card = document.getElementById("card");
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const recognition = new SpeechRecognition();
+recognition.lang = "en-US";
+recognition.continuous = false;
+
+/* 🔊 Speak */
+function speak(text) {
+ speechSynthesis.cancel();
+ const msg = new SpeechSynthesisUtterance(text);
+ msg.rate = 0.9;
+ speechSynthesis.speak(msg);
+}
+
+/* ▶️ Start Game */
+startBtn.onclick = async () => {
+ startBtn.style.display = "none";
+ await askMicOnce();
+ nextFlag();
+};
+
+/* 🎤 Ask mic ONLY ONCE */
+async function askMicOnce() {
+ if (micGranted) return;
+ try {
+   recognition.start();
+   recognition.stop();
+   micGranted = true;
+ } catch(e){}
+}
+
+/* 🎲 Next Flag */
+function nextFlag() {
+ card.classList.remove("correct","wrong");
+ currentCountry = countries[Math.floor(Math.random()*countries.length)];
+ flag.src = currentCountry.flag;
+ spoken.textContent = "🎤 Say the country name";
+ answer.textContent = "";
+ infoBox.style.display = "none";
+ startTimer();
+ setTimeout(startListening,1200);
+}
+
+/* 🎙 Start listening */
+function startListening() {
+ if (paused) return;
+ listening = true;
+ recognition.start();
+ speak("Say the country name");
+}
+
+/* ⏱ Timer */
+function startTimer() {
+ clearInterval(timer);
+ timeLeft = 20;
+ updateTimer();
+ timer = setInterval(()=>{
+  if(paused) return;
+  timeLeft--;
+  updateTimer();
+  if(timeLeft===0){
+   clearInterval(timer);
+   recognition.stop();
+   wrong++;
+   updateScore();
+   showResult(false);
+  }
+ },1000);
+}
+
+function updateTimer(){
+ timerEl.textContent = "Time: 00:" + String(timeLeft).padStart(2,"0");
+}
+
+/* 🎙 Result */
+recognition.onresult = e => {
+ if(!listening) return;
+ listening=false;
+ clearInterval(timer);
+ const said = e.results[0][0].transcript.toLowerCase();
+ spoken.textContent="You said: "+said;
+ if(said.includes(currentCountry.name.toLowerCase())){
+  correct++; updateScore(); showResult(true);
+ } else {
+  wrong++; updateScore(); showResult(false);
+ }
+};
+
+/* 📢 Show result */
+function showResult(isCorrect){
+ card.classList.add(isCorrect?"correct":"wrong");
+ answer.textContent = isCorrect?"🎉 YES! Correct":"❌ Wrong Answer";
+ answer.style.color = isCorrect?"green":"red";
+
+ speak(
+  (isCorrect?"Correct. ":"Wrong. ") +
+  "Country is " + currentCountry.name +
+  ". Capital is " + currentCountry.capital +
+  ". Continent is " + currentCountry.continent
+ );
+
+ infoBox.innerHTML = `
+ <strong>${currentCountry.name}</strong><br>
+ 🏛 Capital: ${currentCountry.capital}<br>
+ 🌍 Continent: ${currentCountry.continent}
+ `;
+ infoBox.style.display="block";
+
+ setTimeout(nextFlag,10000); // ⏱ 10 seconds wait
+}
+
+/* 📊 Score */
+function updateScore(){
+ document.getElementById("correct").textContent=correct;
+ document.getElementById("wrong").textContent=wrong;
+}
+
+/* ⏸ Pause on tab change */
+document.addEventListener("visibilitychange",()=>{
+ paused = document.hidden;
+ if(paused){
+  recognition.stop();
+ } else {
+  updateTimer();
+ }
+});
+</script>
+
+</body>
+</html>
